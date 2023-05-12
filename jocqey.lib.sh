@@ -440,3 +440,4 @@ originalish_stop_qortal() {
 #  [[ -n "${kurt}" ]] && echo "kurt=${kurt}"
 #  #  echo ${BASH_VERSION}
 #}
+

@@ -30,3 +30,4 @@ fail() {
 }
 
 execute "$@"
+

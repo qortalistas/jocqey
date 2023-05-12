@@ -5,7 +5,7 @@
 ### Synopsis
 
 The scripts in this repository are used to start and stop the Qortal server.
-The idea is implement extra functionality to the ordinary startStopScripts such as eg. optimization of JAVA memory args.
+The idea is to implement extra functionality to the ordinary startStopScripts such as eg. optimization of JAVA memory args.
 
 Ths scripts are ultimately meant to end up in the "qortal" folder of the Qortal server.
 But during development they can be kept in a separate folder, and all scripts named "optional_*" are meant to handle

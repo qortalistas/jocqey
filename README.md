@@ -35,6 +35,6 @@ Scripting could be implemented to evaluate dependencies such as this.
 Overall I have mostly maintained the 'original' logic, but if worthwhile, I could see improvements to be made to robustify some things - particularly the stop-function.
 
 ### The stuff that I forgot to write about
-, maybe because I am a lazy bastard or maybe because it was too obvious to me.
+, maybe because it was too obvious to me.
 You're welcome ;-):
 ...

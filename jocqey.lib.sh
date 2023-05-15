@@ -237,18 +237,6 @@ unrun_qortal() {
     read pid 2>/dev/null <run.pid
     is_pid_valid=$?
   }
-  _testnet_port() {
-    # Swap out the API port if the --testnet (or -t) argument is specified
-    api_port=12391
-    for param in "$@"; do
-      case $param in
-      -t | --testnet*)
-        api_port=62391
-        break
-        ;;
-      esac
-    done
-  }
   _locate_pid() {
     # Attempt to locate the process ID if we don't have one
     if [ -z "${pid}" ]; then
@@ -260,6 +248,18 @@ unrun_qortal() {
     # Locate the API key if it exists
     apikey=$(cat apikey.txt)
     success=0
+  }
+  _testnet_port() {
+    # Swap out the API port if the --testnet (or -t) argument is specified
+    api_port=12391
+    for param in "$@"; do
+      case $param in
+      -t | --testnet*)
+        api_port=62391
+        break
+        ;;
+      esac
+    done
   }
   _stop_via_api() {
     # Try and stop via the API
@@ -309,8 +309,8 @@ unrun_qortal() {
   }
 
   _read_pid
-  _testnet_port "$@"
   _locate_pid
+  _testnet_port "$@"
   _read_apikey
   _stop_via_api
   _kill_by_sigterm

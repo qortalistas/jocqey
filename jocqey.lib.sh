@@ -11,10 +11,6 @@ init_vars() {
   #  JAVA_EXE_FILE=invalid # for testing
   JAVA_EXE_FILE="${JAVA_EXE_FILE:-$(which java)}"
   MIN_JAVA_VER="${MIN_JAVA_VER:-11.0}"
-  ##   Limits Java JVM stack size and maximum heap usage.
-  ##   Comment out for bigger systems, e.g. non-routers
-  ##   or when API documentation is enabled
-  ##   JVM_MEMORY_ARGS="-Xss256k -Xmx128m"
   #    debug "JAVA_EXE_FILE=${JAVA_EXE_FILE}"
   #### IF JVM_ARGS is set from config, use it, otherwise leave unset:
   [ -n "${JVM_MEMORY_XSS_SIZE}" ] && JVM_MEMORY_XSS="-Xss${JVM_MEMORY_XSS_SIZE}"
@@ -70,10 +66,6 @@ preparyze() {
 start_qortal() {
   preparyze
   message "Starting Qortal..."
-  #  init_vars
-  #  is_user_valid || fail "Please su to non-root user before running"
-  #  qortal_jar_found || fail "${QORTAL_JAR_FILENAME} not found"
-  #  check_java || fail "Java not valid"
   ## TODO: check if qortal is already running
   run_qortal
 }
@@ -100,10 +92,6 @@ is_user_valid() {
   [ "${ALLOW_ROOT_USER}" = 'true' ] && return 0
   [ "$(id -u)" -ne 0 ]
 }
-
-#is_user_root() {
-#  [ "$(id -u)" -eq 0 ]
-#}
 
 qortal_jar_found() {
   [ -e ${QORTAL_JAR_FILENAME} ] && return 0
@@ -133,31 +121,6 @@ check_java() {
   #  return 0
 }
 
-#message() {
-#  print_color '1;33' "$*"
-#}
-#
-#debug() {
-#  print_color '1;37' "$*"
-#}
-#
-#error() {
-#  print_color '34' "ERROR: $*"
-#  return 1
-#}
-#
-#fail() {
-#  print_color '31' "FAIL: $*"
-#  exit 1
-#}
-#
-#x_print_color() {
-#  color_code="${1:-0}"
-#  shift
-#  #  echo "\e[${color_code}m$*\e[0m"
-#  echo -e "\e[${color_code}m$*\e[0m" # In POSIX sh, echo flags are undefined.
-#}
-
 message() {
   print_color "${yellow}" "$@"
 }
@@ -167,31 +130,41 @@ debug() {
 }
 
 success() {
-  print_color "${green}" 'OK: ' "$@"
+  print_color "${green}" -p 'OK: ' "$@"
   return 0
 }
 
 error() {
-  print_color "${orange}" 'ERROR: ' "$@"
+  print_color "${orange}" -p 'ERROR: ' "$@"
   return 1
 }
 
 fail() {
-  print_color "${red}" 'FAIL: ' "$@"
+  print_color "${red}" -p 'FAIL: ' "$@"
   exit 1
 }
 
 print_color() {
   color="$1"
   shift
-  #todo posixfy nflag
+  if [ "$1" = '-p' ]; then
+    shift
+    pretxt="$1"
+    shift
+  fi
+  #todone posixfy nflag ... if possible - maybe using printf?
   # In POSIX sh, echo flags are undefined.
   if [ "$1" = '-n' ]; then
     shift
-    echo -n "${color}$*${normal}"
+    #    echo -n "${color}$*${normal}"
+    #    printf "${color}%s${normal}" "$*"
+    printf "${color}%s%s${normal}" "${pretxt}" "$*"
   else
-    echo "${color}$*${normal}"
+    #    echo "${color}$*${normal}"
+    #    printf "${color}%s${normal}\n" "$*"
+    printf "${color}%s%s${normal}\n" "${pretxt}" "$*"
   fi
+  unset pretxt
 }
 
 init_colors() {
@@ -200,21 +173,13 @@ init_colors() {
     if [ -n "${ncolors}" ] && [ "${ncolors}" -ge 8 ]; then
       if normal="$(tput sgr0)"; then
         # use terminfo names
-        #        echo "terminfo names"
         red="$(tput setaf 160)"
         green="$(tput setaf 10)"
         yellow="$(tput setaf 11)"
         blue="$(tput setaf 12)"
         grey="$(tput setaf 7)"
         orange="$(tput setaf 166)"
-
-        #        for i in {1..255}; do
-        #          echo "$(tput setaf "${i}") ${i} $(tput sgr0)"
-        #          #    print_color "${i}" "${i}"
-        #        done
-
       else
-        #        echo "termcap names"
         # use termcap names for FreeBSD compat
         normal="$(tput me)"
         red="$(tput AF 160)"
@@ -229,6 +194,7 @@ init_colors() {
 }
 
 test_colors() {
+  #### requires bash.
   message "test_colors"
   for color in red green yellow blue grey orange; do
     print_color "${!color}" "${color}"
@@ -243,6 +209,17 @@ test_colors() {
 test_qortal() {
   preparyze
   message "test_qortal"
+
+  for i in 1 2 3 4; do
+    debug -n "$i"
+  done
+  echo
+
+  for i in 1 2 3 4; do
+    success -n "$i "
+  done
+  echo
+
   test_colors
   debug "debug"
   message "message"
@@ -269,9 +246,6 @@ unrun_qortal() {
       ;;
     esac
   done
-  #  if [[ "$@" = *"--testnet"* ]] || [[ "$@" = *"-t"* ]]; then
-  #    api_port=62391
-  #  fi
 
   # Attempt to locate the process ID if we don't have one
   if [ -z "${pid}" ]; then
@@ -306,7 +280,6 @@ unrun_qortal() {
       #      echo "${red}Stop command failed - not running with process id ${pid}?${normal}"
     else
       fail "Stop command failed - not running?"
-      #      echo "${red}Stop command failed - not running?${normal}"
     fi
     #    exit 1
   fi
@@ -322,122 +295,9 @@ unrun_qortal() {
       done
       echo
       success "Qortal ended gracefully"
-      #      echo "${green}Qortal ended gracefully${normal}"
       rm -f run.pid
     fi
   fi
 
   exit 0
 }
-
-################################################################################
-
-originalish_stop_qortal() {
-  message "Stopping Qortal..."
-  # Check for color support
-  if [ -t 1 ]; then
-    ncolors=$(tput colors)
-    if [ -n "${ncolors}" ] && [ "${ncolors}" -ge 8 ]; then
-      if normal="$(tput sgr0)"; then
-        # use terminfo names
-        red="$(tput setaf 1)"
-        green="$(tput setaf 2)"
-      else
-        # use termcap names for FreeBSD compat
-        normal="$(tput me)"
-        red="$(tput AF 1)"
-        green="$(tput AF 2)"
-      fi
-    fi
-  fi
-
-  # Track the pid if we can find it
-  read pid 2>/dev/null <run.pid
-  is_pid_valid=$?
-
-  # Swap out the API port if the --testnet (or -t) argument is specified
-  api_port=12391
-  for param in "$@"; do
-    case $param in
-    -t | --testnet*)
-      api_port=62391
-      break
-      ;;
-    esac
-  done
-  #  if [[ "$@" = *"--testnet"* ]] || [[ "$@" = *"-t"* ]]; then
-  #    api_port=62391
-  #  fi
-
-  # Attempt to locate the process ID if we don't have one
-  if [ -z "${pid}" ]; then
-    pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
-    is_pid_valid=$?
-  fi
-
-  # Locate the API key if it exists
-  apikey=$(cat apikey.txt)
-  success=0
-
-  # Try and stop via the API
-  if [ -n "$apikey" ]; then
-    echo "Stopping Qortal via API..."
-    if curl --url "http://localhost:${api_port}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
-      success=1
-    fi
-  fi
-
-  # Try to kill process with SIGTERM
-  if [ "$success" -ne 1 ] && [ -n "$pid" ]; then
-    echo "Stopping Qortal process $pid..."
-    if kill -15 "${pid}"; then
-      success=1
-    fi
-  fi
-
-  # Warn and exit if still no success
-  if [ "$success" -ne 1 ]; then
-    if [ -n "$pid" ]; then
-      echo "${red}Stop command failed - not running with process id ${pid}?${normal}"
-    else
-      echo "${red}Stop command failed - not running?${normal}"
-    fi
-    exit 1
-  fi
-
-  if [ "$success" -eq 1 ]; then
-    echo "Qortal node should be shutting down"
-    if [ "${is_pid_valid}" -eq 0 ]; then
-      echo -n "Monitoring for Qortal node to end"
-      #      while s=$(ps -p $pid -o stat=) && [[ "$s" && "$s" != 'Z' ]]; do
-      while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
-        echo -n .
-        sleep 1
-      done
-      echo
-      echo "${green}Qortal ended gracefully${normal}"
-      rm -f run.pid
-    fi
-  fi
-
-  exit 0
-
-}
-################################################################################
-#shelly() {
-#  echo "execute() $*"
-#  _ps=$(ps -p $$)
-#  echo "_ps=${_ps}"
-#  #  echo $0
-#  readlink /proc/$$/exe
-#  #  env
-#  #  echo "1SHELL=${SHELL}"
-#  echo "POSIXLY_CORRECT=${POSIXLY_CORRECT}"
-#
-#  #unset SHELL
-#  kurt=1
-#  [ -n "${kurt}" ] && echo "kurt=${kurt}"
-#  [[ -n "${kurt}" ]] && echo "kurt=${kurt}"
-#  #  echo ${BASH_VERSION}
-#}
-

@@ -176,7 +176,7 @@ init_colors() {
         red="$(tput setaf 160)"
         green="$(tput setaf 10)"
         yellow="$(tput setaf 11)"
-        blue="$(tput setaf 12)"
+        #        blue="$(tput setaf 12)"
         grey="$(tput setaf 7)"
         orange="$(tput setaf 166)"
       else
@@ -185,7 +185,7 @@ init_colors() {
         red="$(tput AF 160)"
         green="$(tput AF 10)"
         yellow="$(tput AF 11)"
-        blue="$(tput AF 12)"
+        #        blue="$(tput AF 12)"
         grey="$(tput AF 7)"
         orange="$(tput AF 166)"
       fi
@@ -197,6 +197,7 @@ test_colors() {
   #### requires bash.
   message "test_colors"
   for color in red green yellow blue grey orange; do
+    # shellcheck disable=SC2039
     print_color "${!color}" "${color}"
   done
   # for i in 1 to 255; do

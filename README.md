@@ -11,7 +11,7 @@ The idea is to implement extra functionality to the ordinary startStopScripts su
 
 These scripts are adapted from the original startStopScripts from qortal-core.
 
-Ths scripts are ultimately meant to end up in the "qortal" folder of the Qortal server.
+These scripts are ultimately meant to end up in the "qortal" folder of the Qortal server.
 But during development they can be kept in a separate folder, and all scripts named "optional_*" are meant to handle
 this scenario.
 

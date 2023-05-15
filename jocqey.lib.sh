@@ -231,6 +231,98 @@ test_qortal() {
 
 unrun_qortal() {
   #  debug "unrun_qortal"
+  #### Split into subfunctions for easier (future) development.
+  _read_pid() {
+    # Track the pid if we can find it
+    read pid 2>/dev/null <run.pid
+    is_pid_valid=$?
+  }
+  _testnet_port() {
+    # Swap out the API port if the --testnet (or -t) argument is specified
+    api_port=12391
+    for param in "$@"; do
+      case $param in
+      -t | --testnet*)
+        api_port=62391
+        break
+        ;;
+      esac
+    done
+  }
+  _locate_pid() {
+    # Attempt to locate the process ID if we don't have one
+    if [ -z "${pid}" ]; then
+      pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
+      is_pid_valid=$?
+    fi
+  }
+  _read_apikey() {
+    # Locate the API key if it exists
+    apikey=$(cat apikey.txt)
+    success=0
+  }
+  _stop_via_api() {
+    # Try and stop via the API
+    if [ -n "$apikey" ]; then
+      message "Stopping Qortal via API …"
+      if curl --url "http://localhost:${api_port}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
+        success=1
+      fi
+    fi
+  }
+  _kill_by_sigterm() {
+    # Try to kill process with SIGTERM
+    if [ "$success" -ne 1 ] && [ -n "$pid" ]; then
+      message "Stopping Qortal via kill process $pid …"
+      if kill -15 "${pid}"; then
+        success=1
+      fi
+    fi
+  }
+  _no_success_exit() {
+    # Warn and exit if still no success
+    if [ "$success" -ne 1 ]; then
+      if [ -n "$pid" ]; then
+        fail "Stop command failed - not running with process id ${pid}?"
+        #      echo "${red}Stop command failed - not running with process id ${pid}?${normal}"
+      else
+        fail "Stop command failed - not running?"
+      fi
+      #    exit 1
+    fi
+  }
+  _monitor_ending() {
+    if [ "$success" -eq 1 ]; then
+      message "Qortal node should be shutting down"
+      if [ "${is_pid_valid}" -eq 0 ]; then
+        message -n "Monitoring for Qortal node to end: "
+        #      while s=$(ps -p $pid -o stat=) && [[ "$s" && "$s" != 'Z' ]]; do
+        while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
+          message -n .
+          sleep 1
+        done
+        echo
+        success "Qortal ended gracefully"
+        rm -f run.pid
+      fi
+    fi
+  }
+
+  _read_pid
+  _testnet_port "$@"
+  _locate_pid
+  _read_apikey
+  _stop_via_api
+  _kill_by_sigterm
+  _no_success_exit
+  _monitor_ending
+
+  exit 0
+}
+
+x_unrun_qortal() {
+  #  debug "unrun_qortal"
+  #### NOT split into subfunctions.
 
   # Track the pid if we can find it
   read pid 2>/dev/null <run.pid

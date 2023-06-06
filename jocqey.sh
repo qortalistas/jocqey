@@ -354,10 +354,12 @@ execute_arguments() {
   shift
   case "${command}" in
   start)
-    start_qortal "$@"
+#    start_qortal "$@"
+    func='start_qortal'
     ;;
   stop)
-    stop_qortal "$@"
+#    stop_qortal "$@"
+    func='stop_qortal'
     ;;
     #  restart)
     #    restart_qortal "$@"
@@ -366,7 +368,8 @@ execute_arguments() {
     #    status_qortal "$@"
     #    ;;
   test)
-    test_qortal "$@"
+#    test_qortal "$@"
+    func='test_qortal'
     ;;
   *)
     error "Unknown command: ${command}"
@@ -374,6 +377,8 @@ execute_arguments() {
     exit 1
     ;;
   esac
+  [ -z "${func}" ] && fail "func is empty (Should not happen)"
+  "${func}" "$@"
 }
 
 init_lib "$@"

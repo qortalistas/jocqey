@@ -1,7 +1,7 @@
 #!/bin/sh
 
 init_lib() {
-  #  echo "init_lib"
+  debug 'init_lib'
   MONIKER='jocqey'
   #  DO_EXECUTE='true'
   #  if [ $1 = '--no-execute' ]; then
@@ -109,20 +109,21 @@ preparyze() {
 }
 
 start_qortal() {
-  preparyze
+  debug 'start_qortal'
+#  preparyze
   message "Starting Qortal..."
   ## TODO: check if qortal is already running
   is_pid_running '--strict' && fail "This Qortal is already running."
-  if is_multi_instance_mode; then
-    is_pid_running && fail "Some other Qortal is already running on port ${API_PORT}"
+  if ! is_multi_instance_mode; then
+    is_pid_running '--lenient' && fail "Some other Qortal is already running (Not in local pid-file)"
   fi
-  is_api_running && fail "Some Qortal is already running on port ${API_PORT}"
+  is_api_running && fail "Some Qortal is already running on 'our' port ${API_PORT}"
   run_qortal
   monitor_startup
 }
 
 stop_qortal() {
-  preparyze
+#  preparyze
   message "Stopping Qortal..."
   unrun_qortal "$@"
 }
@@ -148,6 +149,15 @@ unrun_qortal() {
     apikey=$(cat apikey.txt)
     success=0
   }
+  #  _locate_any_qortal_pid() {
+  #    # Attempt to locate ANY qortal process ID if we don't have one
+  #    if [ -z "${pid}" ]; then
+  #      pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
+  #      has_fetched_pid=$?
+  #    fi
+  #    return ${has_fetched_pid}
+  #  }
+
   _testnet_port() {
     # Swap out the API port if the --testnet (or -t) argument is specified
     for param in "$@"; do
@@ -192,10 +202,8 @@ unrun_qortal() {
   _monitor_ending() {
     if [ "$success" -eq 1 ]; then
       message "Qortal node should be shutting down"
-      if [ "${is_pid_valid}" -eq 0 ]; then
+      if is_pid_fetched; then
         message -n "Monitoring for Qortal node to end: "
-        #      while s=$(ps -p $pid -o stat=) && [[ "$s" && "$s" != 'Z' ]]; do
-        #      while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
         while is_pid_running; do
           message -n .
           sleep 1
@@ -203,13 +211,12 @@ unrun_qortal() {
         echo
         success "Qortal ended gracefully"
         erase_pid
-        #        rm -f run.pid
       fi
     fi
   }
 
   #  read_pid
-  #  locate_any_pid
+  #  locate_any_qortal_pid
   obtain_pid
   _testnet_port "$@"
   _read_apikey
@@ -225,43 +232,62 @@ erase_pid() {
   rm -f run.pid
 }
 
+is_pid_fetched() {
+  [ "${has_fetched_pid}" -eq 0 ]
+}
+
 read_pid() {
   unset pid
   # Read the pid file if possible
   read pid 2>/dev/null <run.pid
-  is_pid_valid=$?
-  return ${is_pid_valid}
+  has_fetched_pid=$?
+  return ${has_fetched_pid}
 }
 
-locate_any_pid() {
+locate_any_qortal_pid() {
   # Attempt to locate ANY qortal process ID if we don't have one
-  if [ -z "${pid}" ]; then
-    pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
-    is_pid_valid=$?
-  fi
-  return ${is_pid_valid}
+  #  if [ -z "${pid}" ]; then
+  # shellcheck disable=SC2009
+  pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
+  has_fetched_pid=$?
+  #  fi
+  return ${has_fetched_pid}
 }
 
+# shellcheck disable=SC2120
 obtain_pid() {
+  mode='lenient'
+  if [ "$1" = '--strict' ]; then
+    shift
+    mode='strict'
+  elif [ "$1" = '--lenient' ]; then
+    shift
+    mode='lenient'
+  elif is_multi_instance_mode; then
+    mode='strict'
+  fi
   read_pid
-  locate_any_pid
+  if [ mode = 'lenient' ]; then
+    locate_any_qortal_pid
+  fi
+  return ${has_fetched_pid}
 }
 
 # shellcheck disable=SC2120
 is_pid_running() {
-  obtain_func='obtain_pid'
-  if [ "$1" = '--strict' ]; then
-    shift
-    obtain_func='read_pid'
-  fi
-  #set pid to arg1 if not already set:
-  pid="${pid:-$1}"
-  if [ -z "${pid}" ]; then
-    # obtain pid if not already set:
-    #    obtain_pid
-    "${obtain_func}"
-  fi
-  [ "${is_pid_valid}" -eq 0 ] || return "${is_pid_valid}"
+  #  obtain_func='obtain_pid'
+  #  if [ "$1" = '--strict' ]; then
+  #    shift
+  #    obtain_func='read_pid'
+  #  fi
+  #  #set pid to arg1 if not already set:
+  #  pid="${pid:-$1}"
+  #  if [ -z "${pid}" ]; then
+  #    # obtain pid if not already set:
+  #    "${obtain_func}"
+  #  fi
+  obtain_pid "$@"
+  is_pid_fetched || return "${has_fetched_pid}"
   s=$(ps -p "${pid}" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]
 }
 
@@ -520,80 +546,4 @@ if [ "${NO_EXECUTE}" != 'true' ]; then
   execute_arguments "$@"
 fi
 
-# var is not equal to string:
-
 #####################
-
-#x_unrun_qortal() {
-#  #  debug "unrun_qortal"
-#  #### NOT split into subfunctions.
-#
-#  # Track the pid if we can find it
-#  read pid 2>/dev/null <run.pid
-#  is_pid_valid=$?
-#
-#  # Swap out the API port if the --testnet (or -t) argument is specified
-#  API_PORT=12391
-#  for param in "$@"; do
-#    case $param in
-#    -t | --testnet*)
-#      API_PORT=62391
-#      break
-#      ;;
-#    esac
-#  done
-#
-#  # Attempt to locate the process ID if we don't have one
-#  if [ -z "${pid}" ]; then
-#    pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
-#    is_pid_valid=$?
-#  fi
-#
-#  # Locate the API key if it exists
-#  apikey=$(cat apikey.txt)
-#  success=0
-#
-#  # Try and stop via the API
-#  if [ -n "$apikey" ]; then
-#    message "Stopping Qortal via API …"
-#    if curl --url "http://localhost:${API_PORT}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
-#      success=1
-#    fi
-#  fi
-#
-#  # Try to kill process with SIGTERM
-#  if [ "$success" -ne 1 ] && [ -n "$pid" ]; then
-#    message "Stopping Qortal via kill process $pid …"
-#    if kill -15 "${pid}"; then
-#      success=1
-#    fi
-#  fi
-#
-#  # Warn and exit if still no success
-#  if [ "$success" -ne 1 ]; then
-#    if [ -n "$pid" ]; then
-#      fail "Stop command failed - not running with process id ${pid}?"
-#      #      echo "${red}Stop command failed - not running with process id ${pid}?${normal}"
-#    else
-#      fail "Stop command failed - not running?"
-#    fi
-#    #    exit 1
-#  fi
-#
-#  if [ "$success" -eq 1 ]; then
-#    message "Qortal node should be shutting down"
-#    if [ "${is_pid_valid}" -eq 0 ]; then
-#      message -n "Monitoring for Qortal node to end: "
-#      #      while s=$(ps -p $pid -o stat=) && [[ "$s" && "$s" != 'Z' ]]; do
-#      while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
-#        message -n .
-#        sleep 1
-#      done
-#      echo
-#      success "Qortal ended gracefully"
-#      rm -f run.pid
-#    fi
-#  fi
-#
-#  exit 0
-#}

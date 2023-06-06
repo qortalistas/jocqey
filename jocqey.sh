@@ -1,7 +1,7 @@
 #!/bin/sh
 
 init_lib() {
-  echo "init_lib"
+  #  echo "init_lib"
   MONIKER='jocqey'
   #  DO_EXECUTE='true'
   #  if [ $1 = '--no-execute' ]; then
@@ -24,6 +24,7 @@ init_lib() {
   QORTAL_CONFIG_FILENAME="${MONIKER}.config"
   QORTAL_CONFIG_FILE="${QORTAL_DIR}/${QORTAL_CONFIG_FILENAME}"
   #  [ -f "${QORTAL_CONFIG_FILE}" ] || fail "Could not find ${QORTAL_JAR_FILENAME}"
+  cd "${QORTAL_DIR}" || fail "Could not cd to ${QORTAL_DIR}"
 }
 
 init_vars() {
@@ -67,8 +68,9 @@ ${XSS_LINE}
 ${XMX_LINE}
 
 #JAVA_EXE_FILE=custom_path_to_java
-#ALLOW_ROOT_USER=true
 #MIN_JAVA_VER=11.0
+#ALLOW_ROOT_USER=true
+#DEBUG_MODE=true
 
 EOF
 }
@@ -78,8 +80,18 @@ source_config() {
   . "${QORTAL_CONFIG_FILE}" || fail "Could not source ${QORTAL_CONFIG_FILENAME}"
 }
 
+init_from_config() {
+  if [ "${DEBUG_MODE}" != 'true' ]; then
+    # If not in debug mode, create an inactive debug function.
+    debug() {
+      :
+    }
+  fi
+}
+
 preparyze() {
   init_vars
+  init_from_config
   init_colors
   debug "Preparing Qortal..."
   is_user_valid || fail "Please su to non-root user before running"
@@ -91,7 +103,9 @@ start_qortal() {
   preparyze
   message "Starting Qortal..."
   ## TODO: check if qortal is already running
+  is_pid_running '--strict' && fail "Qortal is already running."
   run_qortal
+  monitor_startup
 }
 
 stop_qortal() {
@@ -108,6 +122,7 @@ run_qortal() {
     -jar "${QORTAL_JAR_FILENAME}" \
     1>run.log 2>&1 &
   # Save backgrounded process's PID
+  erase_pid
   echo $! >run.pid
   success qortal running as pid $!
 }
@@ -115,18 +130,6 @@ run_qortal() {
 unrun_qortal() {
   #  debug "unrun_qortal"
   #### Split into subfunctions for easier (future) development.
-  _read_pid() {
-    # Track the pid if we can find it
-    read pid 2>/dev/null <run.pid
-    is_pid_valid=$?
-  }
-  _locate_pid() {
-    # Attempt to locate the process ID if we don't have one
-    if [ -z "${pid}" ]; then
-      pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
-      is_pid_valid=$?
-    fi
-  }
   _read_apikey() {
     # Locate the API key if it exists
     apikey=$(cat apikey.txt)
@@ -180,19 +183,22 @@ unrun_qortal() {
       if [ "${is_pid_valid}" -eq 0 ]; then
         message -n "Monitoring for Qortal node to end: "
         #      while s=$(ps -p $pid -o stat=) && [[ "$s" && "$s" != 'Z' ]]; do
-        while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
+        #      while s=$(ps -p "$pid" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]; do
+        while is_pid_running; do
           message -n .
           sleep 1
         done
         echo
         success "Qortal ended gracefully"
-        rm -f run.pid
+        erase_pid
+        #        rm -f run.pid
       fi
     fi
   }
 
-  _read_pid
-  _locate_pid
+  #  read_pid
+  #  locate_any_pid
+  obtain_pid
   _testnet_port "$@"
   _read_apikey
   _stop_via_api
@@ -201,6 +207,86 @@ unrun_qortal() {
   _monitor_ending
 
   exit 0
+}
+
+erase_pid() {
+  rm -f run.pid
+}
+
+read_pid() {
+  unset pid
+  # Read the pid file if possible
+  read pid 2>/dev/null <run.pid
+  is_pid_valid=$?
+  return ${is_pid_valid}
+}
+
+locate_any_pid() {
+  # Attempt to locate ANY qortal process ID if we don't have one
+  if [ -z "${pid}" ]; then
+    pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
+    is_pid_valid=$?
+  fi
+  return ${is_pid_valid}
+}
+
+obtain_pid() {
+  read_pid
+  locate_any_pid
+}
+
+# shellcheck disable=SC2120
+is_pid_running() {
+  obtain_func='obtain_pid'
+  if [ "$1" = '--strict' ]; then
+    shift
+    obtain_func='read_pid'
+  fi
+  #set pid to arg1 if not already set:
+  pid="${pid:-$1}"
+  if [ -z "${pid}" ]; then
+    # obtain pid if not already set:
+    #    obtain_pid
+    "${obtain_func}"
+  fi
+  [ "${is_pid_valid}" -eq 0 ] || return "${is_pid_valid}"
+  s=$(ps -p "${pid}" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]
+}
+
+monitor_startup() {
+  # Monitor for Qortal node to start
+  message -n "Monitoring for Qortal node to start: "
+  message -n "Monitoring for pid to appear: "
+  dur=5
+  endTime=$(($(date +%s) + dur))
+  while ! read_pid && [ "$(date +%s)" -lt $endTime ]; do
+    message -n .
+    sleep 0.01
+  done
+  echo
+  read_pid || startup_failed "Pid-file did not appear."
+  debug "Pid file appeared."
+  is_pid_running || startup_failed "Pid is not running."
+  ####
+  #  https://superuser.com/a/900134
+  #( tail -f -n0 logfile.log & ) | grep -q "Server Started"
+  message -n 'Monitoring for "API started" ... '
+  LOG_FILE="${QORTAL_DIR}/log/qortal.log"
+  #  (tail -f -n0 "${LOG_FILE}" &) | grep -q "Starting API"
+  (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -q "Starting API"
+  # shellcheck disable=SC2181
+  if [ $? -ne 0 ]; then
+    echo "MONITORED FAIL: API started" >>"${LOG_FILE}"
+    startup_failed "API did not start."
+  else
+    echo "MONITORED SUCCES: API started" >>"${LOG_FILE}"
+    success "API started"
+  fi
+}
+
+startup_failed() {
+  erase_pid
+  fail "Startup failed: $1"
 }
 
 is_user_valid() {
@@ -342,7 +428,6 @@ test_qortal() {
 ####
 
 execute_arguments() {
-  preparyze
   debug "execute_arguments $*"
   # if no arguments, then exit:
   if [ $# -eq 0 ]; then
@@ -354,11 +439,11 @@ execute_arguments() {
   shift
   case "${command}" in
   start)
-#    start_qortal "$@"
+    #    start_qortal "$@"
     func='start_qortal'
     ;;
   stop)
-#    stop_qortal "$@"
+    #    stop_qortal "$@"
     func='stop_qortal'
     ;;
     #  restart)
@@ -368,7 +453,7 @@ execute_arguments() {
     #    status_qortal "$@"
     #    ;;
   test)
-#    test_qortal "$@"
+    #    test_qortal "$@"
     func='test_qortal'
     ;;
   *)
@@ -378,6 +463,7 @@ execute_arguments() {
     ;;
   esac
   [ -z "${func}" ] && fail "func is empty (Should not happen)"
+  preparyze
   "${func}" "$@"
 }
 

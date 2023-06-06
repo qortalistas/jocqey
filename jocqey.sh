@@ -40,6 +40,9 @@ init_vars() {
   #### IF JVM_ARGS is set from config, use it, otherwise leave unset:
   [ -n "${JVM_MEMORY_XSS_SIZE}" ] && JVM_MEMORY_XSS="-Xss${JVM_MEMORY_XSS_SIZE}"
   [ -n "${JVM_MEMORY_XMX_SIZE}" ] && JVM_MEMORY_XMX="-Xmx${JVM_MEMORY_XMX_SIZE}"
+  #  API_PORT=12391
+  API_PORT="${API_PORT:-12391}"
+
 }
 
 calculate_jvm() {
@@ -69,6 +72,8 @@ ${XMX_LINE}
 
 #JAVA_EXE_FILE=custom_path_to_java
 #MIN_JAVA_VER=11.0
+#API_PORT=12391 #Must correspond to apiPort in settings.json
+#MULTI_INSTANCE_MODE=true
 #ALLOW_ROOT_USER=true
 #DEBUG_MODE=true
 
@@ -89,6 +94,10 @@ init_from_config() {
   fi
 }
 
+is_multi_instance_mode() {
+  [ "${MULTI_INSTANCE_MODE}" = 'true' ]
+}
+
 preparyze() {
   init_vars
   init_from_config
@@ -103,7 +112,11 @@ start_qortal() {
   preparyze
   message "Starting Qortal..."
   ## TODO: check if qortal is already running
-  is_pid_running '--strict' && fail "Qortal is already running."
+  is_pid_running '--strict' && fail "This Qortal is already running."
+  if is_multi_instance_mode; then
+    is_pid_running && fail "Some other Qortal is already running on port ${API_PORT}"
+  fi
+  is_api_running && fail "Some Qortal is already running on port ${API_PORT}"
   run_qortal
   monitor_startup
 }
@@ -137,11 +150,10 @@ unrun_qortal() {
   }
   _testnet_port() {
     # Swap out the API port if the --testnet (or -t) argument is specified
-    api_port=12391
     for param in "$@"; do
       case $param in
       -t | --testnet*)
-        api_port=62391
+        API_PORT=62391
         break
         ;;
       esac
@@ -151,7 +163,7 @@ unrun_qortal() {
     # Try and stop via the API
     if [ -n "$apikey" ]; then
       message "Stopping Qortal via API …"
-      if curl --url "http://localhost:${api_port}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
+      if curl --url "http://localhost:${API_PORT}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
         success=1
       fi
     fi
@@ -253,13 +265,27 @@ is_pid_running() {
   s=$(ps -p "${pid}" -o stat=) && [ "$s" ] && [ "$s" != 'Z' ]
 }
 
+is_api_running() {
+  #  debug "--url http://localhost:${API_PORT}/admin/status"
+  API_STATUS=$(curl --fail --silent --url "http://localhost:${API_PORT}/admin/status")
+  #  API_STATUS=$(curl --url "http://localhost:${API_PORT}/admin/status" 2>/dev/null)
+  #  API_STATUS=$(curl --fail --url "http://localhost:${API_PORT}/admin/status" 2>/dev/null)
+  #  curl --url "http://localhost:${API_PORT}/admin/status" 1>/dev/null 2>&1
+  #  # Try and stop via the API
+  #  if [ -n "$apikey" ]; then
+  #    message "Stopping Qortal via API …"
+  #    if curl --url "http://localhost:${API_PORT}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
+  #      success=1
+  #    fi
+  #  fi
+}
+
 monitor_startup() {
   # Monitor for Qortal node to start
   message -n "Monitoring for Qortal node to start: "
-  message -n "Monitoring for pid to appear: "
-  dur=5
-  endTime=$(($(date +%s) + dur))
-  while ! read_pid && [ "$(date +%s)" -lt $endTime ]; do
+  message -n "Monitoring for pid-file to appear: "
+  set_timeout 5
+  while ! read_pid && ! timeout_reached; do
     message -n .
     sleep 0.01
   done
@@ -268,11 +294,9 @@ monitor_startup() {
   debug "Pid file appeared."
   is_pid_running || startup_failed "Pid is not running."
   ####
-  #  https://superuser.com/a/900134
-  #( tail -f -n0 logfile.log & ) | grep -q "Server Started"
-  message -n 'Monitoring for "API started" ... '
+  message -n 'Monitoring log for "API started" ... '
   LOG_FILE="${QORTAL_DIR}/log/qortal.log"
-  #  (tail -f -n0 "${LOG_FILE}" &) | grep -q "Starting API"
+  #  https://superuser.com/a/900134
   (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -q "Starting API"
   # shellcheck disable=SC2181
   if [ $? -ne 0 ]; then
@@ -282,6 +306,30 @@ monitor_startup() {
     echo "MONITORED SUCCES: API started" >>"${LOG_FILE}"
     success "API started"
   fi
+  ####
+  message -n 'Monitoring api for status: '
+  set_timeout 15
+  while ! is_api_running && ! timeout_reached; do
+    message -n .
+    sleep 0.1
+  done
+  echo
+  if is_api_running; then
+    success "API is running"
+    debug "API_STATUS: ${API_STATUS}"
+  else
+    debug "API_STATUS: ${API_STATUS}"
+    startup_failed "API is not running."
+  fi
+}
+
+set_timeout() {
+  dur="${1:-5}"
+  TIMEOUT_END_TIME=$(($(date +%s) + dur))
+}
+
+timeout_reached() {
+  [ "$(date +%s)" -ge "${TIMEOUT_END_TIME}" ]
 }
 
 startup_failed() {
@@ -296,7 +344,7 @@ is_user_valid() {
 
 qortal_jar_found() {
   # This concept inherited from original script is abandoned,
-  # as we're now using the location of qortal.jar to determine the qortal-dir.
+  #  as we're now using the location of qortal.jar to determine the qortal-dir.
   [ -e ${QORTAL_JAR_FILENAME} ] && return 0
   for file in target/qortal*.jar; do
     if [ -f "${file}" ]; then
@@ -485,11 +533,11 @@ fi
 #  is_pid_valid=$?
 #
 #  # Swap out the API port if the --testnet (or -t) argument is specified
-#  api_port=12391
+#  API_PORT=12391
 #  for param in "$@"; do
 #    case $param in
 #    -t | --testnet*)
-#      api_port=62391
+#      API_PORT=62391
 #      break
 #      ;;
 #    esac
@@ -508,7 +556,7 @@ fi
 #  # Try and stop via the API
 #  if [ -n "$apikey" ]; then
 #    message "Stopping Qortal via API …"
-#    if curl --url "http://localhost:${api_port}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
+#    if curl --url "http://localhost:${API_PORT}/admin/stop?apiKey=$apikey" 1>/dev/null 2>&1; then
 #      success=1
 #    fi
 #  fi

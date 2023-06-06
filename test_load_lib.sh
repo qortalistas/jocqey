@@ -2,12 +2,12 @@
 
 execute() {
   printf "\n%s\n" '-----------------------------------------------------------'
-  MONIKER='jocqey'
   load_lib
   test_qortal
 }
 
 load_lib() {
+  MONIKER='jocqey'
   OPERATING_DIR="$(dirname "$(realpath "$0")")"
   for MONIKER_DIR in "${OPERATING_DIR}" "${OPERATING_DIR}/.." \
     "${OPERATING_DIR}/${MONIKER}" "${OPERATING_DIR}/../.." '.'; do

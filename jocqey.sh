@@ -359,12 +359,12 @@ execute_arguments() {
   stop)
     stop_qortal "$@"
     ;;
-  restart)
-    restart_qortal "$@"
-    ;;
-  status)
-    status_qortal "$@"
-    ;;
+    #  restart)
+    #    restart_qortal "$@"
+    #    ;;
+    #  status)
+    #    status_qortal "$@"
+    #    ;;
   test)
     test_qortal "$@"
     ;;
@@ -377,9 +377,11 @@ execute_arguments() {
 }
 
 init_lib "$@"
-if ! [ ${NO_EXECUTE} = 'true' ]; then
+if [ "${NO_EXECUTE}" != 'true' ]; then
   execute_arguments "$@"
 fi
+
+# var is not equal to string:
 
 #####################
 

@@ -2,8 +2,9 @@
 version 2
 ## Qortal start stop
 
-### Synopsis
+(This is outdated version 1)
 
+### Synopsis
 The scripts in this repository are used to start and stop the Qortal server.
 The idea is to implement extra functionality to the ordinary startStopScripts
 such as eg. optimization of JAVA memory args.

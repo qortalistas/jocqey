@@ -11,7 +11,7 @@ init_lib() {
   QORTAL_JAR_FILENAME='qortal.jar'
   OPERATING_DIR="$(dirname "$(realpath "$0")")"
   #  echo "OPERATING_DIR ${OPERATING_DIR}"
-  for dir in "${OPERATING_DIR}" "${OPERATING_DIR}/.." '.'; do
+  for dir in '.' "${OPERATING_DIR}" "${OPERATING_DIR}/.."; do
     QORTAL_DIR="$(realpath "${dir}")"
     QORTAL_JAR_FILE="${QORTAL_DIR}/${QORTAL_JAR_FILENAME}"
     [ -f "${QORTAL_JAR_FILE}" ] && break
@@ -94,6 +94,23 @@ init_from_config() {
   fi
 }
 
+show_circumstances() {
+  message "Circumstances:"
+  _show_var() {
+    print_color "${orange}" "$@"
+  }
+
+  _show_var "MONIKER=${MONIKER}"
+  _show_var "OPERATING_DIR=${OPERATING_DIR}"
+  _show_var "QORTAL_DIR=${QORTAL_DIR}"
+  #  _show_var "QORTAL_CONFIG_FILE=${QORTAL_CONFIG_FILE}"
+  _show_var "0=${0}"
+  #  _show_var "xxx=${xxx}"
+  #  _show_var "xxx=${xxx}"
+  #  _show_var "xxx=${xxx}"
+
+}
+
 is_multi_instance_mode() {
   [ "${MULTI_INSTANCE_MODE}" = 'true' ]
 }
@@ -110,7 +127,7 @@ preparyze() {
 
 start_qortal() {
   debug 'start_qortal'
-#  preparyze
+  #  preparyze
   message "Starting Qortal..."
   ## TODO: check if qortal is already running
   is_pid_running '--strict' && fail "This Qortal is already running."
@@ -123,7 +140,7 @@ start_qortal() {
 }
 
 stop_qortal() {
-#  preparyze
+  #  preparyze
   message "Stopping Qortal..."
   unrun_qortal "$@"
 }
@@ -251,6 +268,7 @@ locate_any_qortal_pid() {
   pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
   has_fetched_pid=$?
   #  fi
+  #  debug "locate_any_qortal_pid   pid=${pid}   has_fetched_pid=${has_fetched_pid}"
   return ${has_fetched_pid}
 }
 
@@ -267,9 +285,10 @@ obtain_pid() {
     mode='strict'
   fi
   read_pid
-  if [ mode = 'lenient' ]; then
+  if [ ${mode} = 'lenient' ]; then
     locate_any_qortal_pid
   fi
+  #  debug "obtain_pid   pid=${pid}   mode=${mode}   has_fetched_pid=${has_fetched_pid}"
   return ${has_fetched_pid}
 }
 
@@ -526,6 +545,9 @@ execute_arguments() {
     #  status)
     #    status_qortal "$@"
     #    ;;
+  circum | show_circumstances)
+    func='show_circumstances'
+    ;;
   test)
     #    test_qortal "$@"
     func='test_qortal'

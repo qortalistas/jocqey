@@ -16,7 +16,7 @@ init_lib() {
     QORTAL_JAR_FILE="${QORTAL_DIR}/${QORTAL_JAR_FILENAME}"
     [ -f "${QORTAL_JAR_FILE}" ] && break
   done
-  [ -f "${QORTAL_JAR_FILE}" ] || fail "Could not find ${QORTAL_JAR_FILENAME} in ${OPERATING_DIR} or ${OPERATING_DIR}/.. or ."
+  [ -f "${QORTAL_JAR_FILE}" ] || fail "Could not find ${QORTAL_JAR_FILENAME} in . or ${OPERATING_DIR} or ${OPERATING_DIR}/.. "
   #  echo "QORTAL_DIR ${QORTAL_DIR}"
   #  echo "QORTAL_JAR_FILE ${QORTAL_JAR_FILE}"
   #  QORTAL_DIR="$(realpath "${QORTAL_DIR}")"
@@ -156,24 +156,17 @@ run_qortal() {
   erase_pid
   echo $! >run.pid
   success qortal running as pid $!
+  debug "JVM_MEMORY_XMX: ${JVM_MEMORY_XMX}"
 }
 
 unrun_qortal() {
   #  debug "unrun_qortal"
   #### Split into subfunctions for easier (future) development.
+  success=0
   _read_apikey() {
     # Locate the API key if it exists
-    apikey=$(cat apikey.txt)
-    success=0
+    [ -f apikey.txt ] && apikey=$(cat apikey.txt)
   }
-  #  _locate_any_qortal_pid() {
-  #    # Attempt to locate ANY qortal process ID if we don't have one
-  #    if [ -z "${pid}" ]; then
-  #      pid=$(ps aux | grep '[q]ortal.jar' | head -n 1 | awk '{print $2}')
-  #      has_fetched_pid=$?
-  #    fi
-  #    return ${has_fetched_pid}
-  #  }
 
   _testnet_port() {
     # Swap out the API port if the --testnet (or -t) argument is specified
@@ -327,7 +320,7 @@ is_api_running() {
 
 monitor_startup() {
   # Monitor for Qortal node to start
-  message -n "Monitoring for Qortal node to start: "
+  message "Monitoring for Qortal node to start: "
   message -n "Monitoring for pid-file to appear: "
   set_timeout 5
   while ! read_pid && ! timeout_reached; do
@@ -339,10 +332,13 @@ monitor_startup() {
   debug "Pid file appeared."
   is_pid_running || startup_failed "Pid is not running."
   ####
-  message -n 'Monitoring log for "API started" ... '
+  message 'Monitoring log for "API started" ... '
   LOG_FILE="${QORTAL_DIR}/log/qortal.log"
   #  https://superuser.com/a/900134
-  (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -q "Starting API"
+  #  (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -q "Starting API"
+  #  (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -m1 "Starting API"
+  line=$( (tail -f --pid="${pid}" -n0 "${LOG_FILE}" &) | grep -m1 "Starting API")
+  debug "apiPort=${line##* }"
   # shellcheck disable=SC2181
   if [ $? -ne 0 ]; then
     echo "MONITORED FAIL: API started" >>"${LOG_FILE}"
